@@ -4,13 +4,14 @@ import android.graphics.Color;
 
 import com.airbnb.lottie.model.content.GradientColor;
 import com.airbnb.lottie.parser.moshi.JsonReader;
+import com.airbnb.lottie.utils.GammaEvaluator;
 import com.airbnb.lottie.utils.MiscUtils;
 
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
-import androidx.annotation.IntRange;
+import androidx.core.math.MathUtils;
 
 public class GradientColorParser implements com.airbnb.lottie.parser.ValueParser<GradientColor> {
   /**
@@ -24,7 +25,7 @@ public class GradientColorParser implements com.airbnb.lottie.parser.ValueParser
 
   /**
    * Both the color stops and opacity stops are in the same array.
-   * There are {@link #colorPoints} colors sequentially as:
+   * There are {@link #colorPoints} colors listed sequentially by position ascending:
    * [
    * ...,
    * position,
@@ -34,7 +35,8 @@ public class GradientColorParser implements com.airbnb.lottie.parser.ValueParser
    * ...
    * ]
    * <p>
-   * The remainder of the array is the opacity stops sequentially as:
+   * The remainder of the array is the opacity stops listed sequentially by position ascending:
+   * Opacity stops are optional
    * [
    * ...,
    * position,
@@ -62,7 +64,7 @@ public class GradientColorParser implements com.airbnb.lottie.parser.ValueParser
       colorPoints = array.size() / 4;
     }
 
-    float[] positions = new float[colorPoints];
+    float[] colorPositions = new float[colorPoints];
     int[] colors = new int[colorPoints];
 
     int r = 0;
@@ -73,7 +75,7 @@ public class GradientColorParser implements com.airbnb.lottie.parser.ValueParser
       switch (i % 4) {
         case 0:
           // position
-          positions[colorIndex] = (float) value;
+          colorPositions[colorIndex] = (float) value;
           break;
         case 1:
           r = (int) (value * 255);
@@ -88,61 +90,92 @@ public class GradientColorParser implements com.airbnb.lottie.parser.ValueParser
       }
     }
 
-    GradientColor gradientColor = new GradientColor(positions, colors);
-    addOpacityStopsToGradientIfNeeded(gradientColor, array);
-    return gradientColor;
-  }
-
-  /**
-   * This cheats a little bit.
-   * Opacity stops can be at arbitrary intervals independent of color stops.
-   * This uses the existing color stops and modifies the opacity at each existing color stop
-   * based on what the opacity would be.
-   * <p>
-   * This should be a good approximation is nearly all cases. However, if there are many more
-   * opacity stops than color stops, information will be lost.
-   */
-  private void addOpacityStopsToGradientIfNeeded(GradientColor gradientColor, List<Float> array) {
-    int startIndex = colorPoints * 4;
-    if (array.size() <= startIndex) {
-      return;
+    // Check if the array continues into opacity data
+    int opacityStartIndex = colorPoints * 4;
+    if (array.size() <= opacityStartIndex) {
+      return new GradientColor(colorPositions, colors);
     }
 
-    int opacityStops = (array.size() - startIndex) / 2;
-    double[] positions = new double[opacityStops];
-    double[] opacities = new double[opacityStops];
+    int opacityStops = (array.size() - opacityStartIndex) / 2;
+    float[] opacityPositions = new float[opacityStops];
+    float[] opacities = new float[opacityStops];
 
-    for (int i = startIndex, j = 0; i < array.size(); i++) {
+    for (int i = opacityStartIndex, j = 0; i < array.size(); i++) {
       if (i % 2 == 0) {
-        positions[j] = array.get(i);
+        opacityPositions[j] = array.get(i);
       } else {
         opacities[j] = array.get(i);
         j++;
       }
     }
 
-    for (int i = 0; i < gradientColor.getSize(); i++) {
-      int color = gradientColor.getColors()[i];
-      color = Color.argb(
-          getOpacityAtPosition(gradientColor.getPositions()[i], positions, opacities),
-          Color.red(color),
-          Color.green(color),
-          Color.blue(color)
-      );
-      gradientColor.getColors()[i] = color;
+    // Combine the opacity and color information into a single array
+    int size = colorPositions.length + opacityPositions.length;
+    float[] gradientPositions = new float[size];
+    int[] gradientColors = new int[size];
+    mergeGradientStops(colorPositions, colors, opacityPositions, opacities, gradientPositions, gradientColors);
+    return new GradientColor(gradientPositions, gradientColors);
+  }
+
+  private void mergeGradientStops(float[] colorPositions, int[] colorStops, float[] opacityPositions, float[] opacityStops, float[] gradientPositions, int[] gradientColors) {
+    int colorIndex = 0;
+    int opacityIndex = 0;
+    float lastPosition = 0;
+    int lastColor = (int) (255 * opacityStops[0]) << 24 | (colorStops[0] & 0x00FFFFFF);
+    while (opacityIndex < opacityPositions.length || colorIndex < colorPositions.length) {
+      float colorPosition;
+      int color;
+      float opacityPosition;
+      int opacity;
+
+      if (colorIndex < colorPositions.length) {
+        colorPosition = colorPositions[colorIndex];
+        color = colorStops[colorIndex] & 0x00FFFFFF;
+      } else {
+        colorPosition = 1;
+        color = lastColor & 0x00FFFFFF;
+      }
+
+      if (opacityIndex < opacityPositions.length) {
+        opacityPosition = opacityPositions[opacityIndex];
+        opacity = (int) (255 * opacityStops[opacityIndex]);
+      } else {
+        opacityPosition = 1;
+        opacity = Color.alpha(lastColor);
+      }
+
+      // Positions are guaranteed to be ordered.
+      int insertColor = interpolateNextColor(lastPosition, lastColor, opacityPosition, opacity, colorPosition, color);
+      float insertPosition = Math.min(colorPosition, opacityPosition);
+
+      gradientColors[colorIndex+opacityIndex] = insertColor;
+      gradientPositions[colorIndex+opacityIndex] = insertPosition;
+
+      if (colorIndex < colorPositions.length && colorPosition <= opacityPosition) {
+        colorIndex++;
+      } else {
+        opacityIndex++;
+      }
+
+      lastColor = insertColor;
+      lastPosition = insertPosition;
     }
   }
 
-  @IntRange(from = 0, to = 255)
-  private int getOpacityAtPosition(double position, double[] positions, double[] opacities) {
-    for (int i = 1; i < positions.length; i++) {
-      double lastPosition = positions[i - 1];
-      double thisPosition = positions[i];
-      if (positions[i] >= position) {
-        double progress = MiscUtils.clamp((position - lastPosition) / (thisPosition - lastPosition), 0, 1);
-        return (int) (255 * MiscUtils.lerp(opacities[i - 1], opacities[i], progress));
-      }
-    }
-    return (int) (255 * opacities[opacities.length - 1]);
+  /**
+   * Interpolate the next color at either the colorPosition or the opacityPosition, whichever is lower.
+   * @return the next color
+   */
+  private int interpolateNextColor(float lastPosition, int lastColor, float opacityPosition, int opacity, float colorPosition, int color) {
+    float opacityDelta = opacityPosition - lastPosition;
+    float colorDelta = colorPosition - lastPosition;
+    float colorProgress = colorDelta > 0 ? MathUtils.clamp(opacityDelta / colorDelta, 0, 1) : 0;
+    float opacityProgress = opacityDelta > 0 ? MathUtils.clamp(colorDelta / opacityDelta, 0, 1) : 0;
+
+    int opacityComponent = MiscUtils.lerp(Color.alpha(lastColor), opacity, opacityProgress) << 24;
+    int colorComponent = GammaEvaluator.evaluate(colorProgress, lastColor & 0x00FFFFFF, color);
+    return opacityComponent | colorComponent;
   }
+
+
 }

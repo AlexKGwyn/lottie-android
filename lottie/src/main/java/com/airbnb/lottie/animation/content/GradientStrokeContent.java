@@ -7,8 +7,6 @@ import android.graphics.PointF;
 import android.graphics.RadialGradient;
 import android.graphics.RectF;
 import android.graphics.Shader;
-import androidx.annotation.Nullable;
-import androidx.collection.LongSparseArray;
 
 import com.airbnb.lottie.LottieDrawable;
 import com.airbnb.lottie.LottieProperty;
@@ -19,6 +17,9 @@ import com.airbnb.lottie.model.content.GradientStroke;
 import com.airbnb.lottie.model.content.GradientType;
 import com.airbnb.lottie.model.layer.BaseLayer;
 import com.airbnb.lottie.value.LottieValueCallback;
+
+import androidx.annotation.Nullable;
+import androidx.collection.LongSparseArray;
 
 public class GradientStrokeContent extends BaseStrokeContent {
   /**
