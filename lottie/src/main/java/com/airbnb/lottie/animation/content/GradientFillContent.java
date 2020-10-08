@@ -159,8 +159,15 @@ public class GradientFillContent
     PointF startPoint = startPointAnimation.getValue();
     PointF endPoint = endPointAnimation.getValue();
     GradientColor gradientColor = colorAnimation.getValue();
-    int[] colors = applyDynamicColorsIfNeeded(gradientColor.getColors());
-    float[] positions = gradientColor.getPositions();
+    final int[] colors;
+    final float[] positions;
+    if (hasDynamicColors()) {
+      colors = applyDynamicColors(gradientColor.getColors());
+      positions = gradientColor.getPositions();
+    } else {
+      colors = gradientColor.getColors();
+      positions = gradientColor.getPositions();
+    }
     gradient = new LinearGradient(startPoint.x, startPoint.y, endPoint.x, endPoint.y, colors,
         positions, Shader.TileMode.CLAMP);
     linearGradientCache.put(gradientHash, gradient);
@@ -176,8 +183,15 @@ public class GradientFillContent
     PointF startPoint = startPointAnimation.getValue();
     PointF endPoint = endPointAnimation.getValue();
     GradientColor gradientColor = colorAnimation.getValue();
-    int[] colors = applyDynamicColorsIfNeeded(gradientColor.getColors());
-    float[] positions = gradientColor.getPositions();
+    final int[] colors;
+    final float[] positions;
+    if (hasDynamicColors()) {
+      colors = applyDynamicColors(gradientColor.getColors());
+      positions = gradientColor.getPositions();
+    } else {
+      colors = gradientColor.getColors();
+      positions = gradientColor.getPositions();
+    }
     float x0 = startPoint.x;
     float y0 = startPoint.y;
     float x1 = endPoint.x;
@@ -208,8 +222,12 @@ public class GradientFillContent
     return hash;
   }
 
-  private int[] applyDynamicColorsIfNeeded(int[] colors) {
-    if (colorCallbackAnimation != null) {
+  private boolean hasDynamicColors(){
+    return colorCallbackAnimation != null;
+  }
+
+  private int[] applyDynamicColors(int[] colors) {
+    if (hasDynamicColors()) {
       Integer[] dynamicColors = (Integer[]) colorCallbackAnimation.getValue();
       if (colors.length == dynamicColors.length) {
         for (int i = 0; i < colors.length; i++) {

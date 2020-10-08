@@ -1,39 +1,19 @@
 package com.airbnb.lottie.model.content;
 
-import com.airbnb.lottie.utils.GammaEvaluator;
-import com.airbnb.lottie.utils.MiscUtils;
+public interface GradientColor {
 
+  /**
+   * @return The merged opacity and colors of this gradient.
+   */
+  public int[] getColors();
 
-public class GradientColor {
-  private final float[] positions;
-  private final int[] colors;
+  /**
+   * @return The merged opacity and color positions of this gradient.
+   */
+  public float[] getPositions();
 
-  public GradientColor(float[] positions, int[] colors) {
-    this.positions = positions;
-    this.colors = colors;
-  }
+  public int getSize();
 
-  public float[] getPositions() {
-    return positions;
-  }
+  public void lerp(GradientColor gc1, GradientColor gc2, float progress);
 
-  public int[] getColors() {
-    return colors;
-  }
-
-  public int getSize() {
-    return colors.length;
-  }
-
-  public void lerp(GradientColor gc1, GradientColor gc2, float progress) {
-    if (gc1.colors.length != gc2.colors.length) {
-      throw new IllegalArgumentException("Cannot interpolate between gradients. Lengths vary (" +
-          gc1.colors.length + " vs " + gc2.colors.length + ")");
-    }
-
-    for (int i = 0; i < gc1.colors.length; i++) {
-      positions[i] = MiscUtils.lerp(gc1.positions[i], gc2.positions[i], progress);
-      colors[i] = GammaEvaluator.evaluate(progress, gc1.colors[i], gc2.colors[i]);
-    }
-  }
 }
