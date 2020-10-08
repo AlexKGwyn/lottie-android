@@ -25,6 +25,7 @@ public class GradientColor {
     return colors.length;
   }
 
+  //TODO this
   public void lerp(GradientColor gc1, GradientColor gc2, float progress) {
     if (gc1.colors.length != gc2.colors.length) {
       throw new IllegalArgumentException("Cannot interpolate between gradients. Lengths vary (" +
