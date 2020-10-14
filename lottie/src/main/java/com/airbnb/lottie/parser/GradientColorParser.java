@@ -9,12 +9,10 @@ import com.airbnb.lottie.utils.MiscUtils;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.LinkedList;
 import java.util.List;
 
 import androidx.annotation.ColorInt;
 import androidx.annotation.FloatRange;
-import androidx.annotation.IntRange;
 
 public class GradientColorParser implements com.airbnb.lottie.parser.ValueParser<GradientColor> {
   /**
@@ -92,6 +90,7 @@ public class GradientColorParser implements com.airbnb.lottie.parser.ValueParser
       }
     }
 
+    // Check if the array continues into opacity data
     int opacityStartIndex = colorPoints * 4;
     if (array.size() <= opacityStartIndex) {
       return new GradientColor(colorPositions, colors);
@@ -125,93 +124,79 @@ public class GradientColorParser implements com.airbnb.lottie.parser.ValueParser
       @FloatRange(from = 0, to = 1) float[] opacityPositions,
       @FloatRange(from = 0, to = 1) float[] opacities) {
 
+    ArrayList<Integer> resultColors = new ArrayList<>();
+    ArrayList<Float> resultPositions = new ArrayList<>();
+
     int colorStops = colorPositions.length;
     int colorIndex = 0;
     float lastColorPosition = 0;
-    int lastColor = colors[0];
+    int lastColor = colors[0] & 0x00FFFFFF;
 
     int opacityStops = opacityPositions.length;
     int opacityIndex = 0;
     float lastOpacityPosition = 0;
-    float lastOpacity = 0;
+    int lastOpacity = 0;
 
-    while(opacityIndex < opacityStops && colorIndex < colorStops){
-      if(colorIndex < )
+    // TODO verify ordering assumption
+    while(opacityIndex < opacityStops || colorIndex < colorStops){
+      float currentColorPosition;
+      int currentColor;
+      float currentOpacityPosition;
+      int currentOpacity;
 
-    }
+      if (colorIndex < colorStops) {
+        currentColorPosition = colorPositions[colorIndex];
+        currentColor = colors[colorIndex] & 0x00FFFFFF;
+      } else {
+        currentColorPosition = 1;
+        currentColor = lastColor;
+      }
 
-    for (int i = 0; i < opacityPositions.length; i++) {
-      int opacity = (int) (255 * opacities[i]);
-      float opacityPosition = opacityPositions[i];
+      if (opacityIndex < opacityStops) {
+        currentOpacityPosition = opacityPositions[opacityIndex];
+        currentOpacity = (int) (255 * opacities[opacityIndex]);
+      } else {
+        currentOpacityPosition = 1;
+        currentOpacity = lastOpacity;
+      }
 
+      int insertColor;
+      float insertPosition;
 
-      for (int j = 0; j < colorPositions.length; j++) {
-        float currentColorPosition = colorPositions[j];
-        int currentColor = colors[j];
-        if (opacityPosition == currentColorPosition) {
-          int newColor = (opacity << 24) | currentColor;
-        } else if (opacityPosition < currentColorPosition) {
-          float progress = (opacity - lastColorPosition) / (currentColorPosition - lastColorPosition);
-          int newColor = (opacity << 24) | GammaEvaluator.evaluate(progress, lastColor, currentColor);
-        }
+      if (currentColorPosition < currentOpacityPosition) {
+        float progress = (currentColorPosition - lastOpacityPosition) / (currentOpacityPosition - lastOpacityPosition);
+        insertColor = MiscUtils.lerp(lastOpacity, currentOpacity, progress) << 24 | currentColor;
+        insertPosition = currentColorPosition;
+      } else if (currentOpacityPosition < currentColorPosition) {
+        float progress = (currentOpacityPosition - lastColorPosition) / (currentColorPosition - lastColorPosition);
+        insertColor = (currentOpacity << 24) | GammaEvaluator.evaluate(progress, lastColor, currentColor);
+        insertPosition = currentOpacityPosition;
+      } else {
+        insertColor = (currentOpacity << 24) | currentColor;
+        insertPosition = currentColorPosition;
+      }
+
+      if (currentColorPosition <= currentOpacityPosition) {
         lastColor = currentColor;
         lastColorPosition = currentColorPosition;
+        colorIndex++;
       }
-    }
-
-    return new GradientColor();
-  }
-
-  /**
-   * This cheats a little bit.
-   * Opacity stops can be at arbitrary intervals independent of color stops.
-   * This uses the existing color stops and modifies the opacity at each existing color stop
-   * based on what the opacity would be.
-   * <p>
-   * This should be a good approximation is nearly all cases. However, if there are many more
-   * opacity stops than color stops, information will be lost.
-   */
-  private void addOpacityStopsToGradientIfNeeded(GradientColor gradientColor, List<Float> array) {
-    int startIndex = colorPoints * 4;
-    if (array.size() <= startIndex) {
-      return;
-    }
-
-    int opacityStops = (array.size() - startIndex) / 2;
-    double[] positions = new double[opacityStops];
-    double[] opacities = new double[opacityStops];
-
-    for (int i = startIndex, j = 0; i < array.size(); i++) {
-      if (i % 2 == 0) {
-        positions[j] = array.get(i);
-      } else {
-        opacities[j] = array.get(i);
-        j++;
+      if (currentOpacityPosition <= currentColorPosition) {
+        lastOpacity = currentOpacity;
+        lastOpacityPosition = currentOpacityPosition;
+        opacityIndex++;
       }
+      resultColors.add(insertColor);
+      resultPositions.add(insertPosition);
     }
 
-    for (int i = 0; i < gradientColor.getSize(); i++) {
-      int color = gradientColor.getColors()[i];
-      color = Color.argb(
-          getOpacityAtPosition(gradientColor.getPositions()[i], positions, opacities),
-          Color.red(color),
-          Color.green(color),
-          Color.blue(color)
-      );
-      gradientColor.getColors()[i] = color;
+    float[] finalPositions = new float[resultPositions.size()];
+    int[] finalColors = new int[resultColors.size()];
+    for (int i = 0; i < resultPositions.size(); i++) {
+      finalPositions[i] = resultPositions.get(i);
+      finalColors[i] = resultColors.get(i);
     }
-  }
 
-  @IntRange(from = 0, to = 255)
-  private int getOpacityAtPosition(double position, double[] positions, double[] opacities) {
-    for (int i = 1; i < positions.length; i++) {
-      double lastPosition = positions[i - 1];
-      double thisPosition = positions[i];
-      if (positions[i] >= position) {
-        double progress = MiscUtils.clamp((position - lastPosition) / (thisPosition - lastPosition), 0, 1);
-        return (int) (255 * MiscUtils.lerp(opacities[i - 1], opacities[i], progress));
-      }
-    }
-    return (int) (255 * opacities[opacities.length - 1]);
+    return new GradientColor(finalPositions, finalColors);
   }
 }
