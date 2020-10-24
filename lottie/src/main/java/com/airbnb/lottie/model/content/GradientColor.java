@@ -5,30 +5,32 @@ import android.graphics.Color;
 import com.airbnb.lottie.utils.GammaEvaluator;
 import com.airbnb.lottie.utils.MiscUtils;
 
+import androidx.annotation.Nullable;
 import androidx.core.math.MathUtils;
 
 
 public class GradientColor {
   private final float[] colorPositions;
-  private final int[] colorComponents;
-  private final float[] opacityPositions;
-  private final float[] opacityComponents;
+  private final int[] colorStops;
+  @Nullable private final float[] opacityPositions;
+  @Nullable private final float[] opacityStops;
 
+  // Arrays holding the merged gradient colors. Can be new arrays or references to their respective color arrays.
   private int[] gradientColors;
   private float[] gradientPositions;
 
-  public GradientColor(float[] colorPositions, int[] colorComponents, float[] opacityPositions, float[] opacityComponents) {
+  public GradientColor(float[] colorPositions, int[] colorStops, @Nullable float[] opacityPositions, @Nullable float[] opacityStops) {
     this.colorPositions = colorPositions;
-    this.colorComponents = colorComponents;
+    this.colorStops = colorStops;
     this.opacityPositions = opacityPositions;
-    this.opacityComponents = opacityComponents;
+    this.opacityStops = opacityStops;
 
-    if (opacityPositions == null) {
-      gradientColors = colorComponents;
+    if (opacityPositions == null || opacityStops == null) {
+      gradientColors = colorStops;
       gradientPositions = colorPositions;
     } else {
       initArrays();
-      mergeGradientComponents();
+      mergeGradientStops();
     }
   }
 
@@ -51,19 +53,23 @@ public class GradientColor {
         positionCount++;
       }
     }
+
     positionCount += (opacityPositions.length - opacityIndex) + (colorPositions.length - colorIndex);
-    if (gradientPositions == null || gradientPositions.length != positionCount) {
+    if (positionCount == colorPositions.length) {
+      gradientPositions = colorPositions;
+      gradientColors = colorStops;
+    } else if (gradientPositions == null || gradientPositions.length != positionCount) {
       gradientPositions = new float[positionCount];
       gradientColors = new int[positionCount];
     }
   }
 
-  private void mergeGradientComponents() {
+  private void mergeGradientStops() {
     int colorIndex = 0;
     int opacityIndex = 0;
     int resultIndex = 0;
     float lastPosition = 0;
-    int lastColor = (int) (255 * opacityComponents[0]) << 24 | (colorComponents[0] & 0x00FFFFFF);
+    int lastColor = (int) (255 * opacityStops[0]) << 24 | (colorStops[0] & 0x00FFFFFF);
     while (opacityIndex < opacityPositions.length || colorIndex < colorPositions.length) {
       float colorPosition;
       int color;
@@ -72,7 +78,7 @@ public class GradientColor {
 
       if (colorIndex < colorPositions.length) {
         colorPosition = colorPositions[colorIndex];
-        color = colorComponents[colorIndex] & 0x00FFFFFF;
+        color = colorStops[colorIndex] & 0x00FFFFFF;
       } else {
         colorPosition = 1;
         color = lastColor & 0x00FFFFFF;
@@ -80,7 +86,7 @@ public class GradientColor {
 
       if (opacityIndex < opacityPositions.length) {
         opacityPosition = opacityPositions[opacityIndex];
-        opacity = (int) (255 * opacityComponents[opacityIndex]);
+        opacity = (int) (255 * opacityStops[opacityIndex]);
       } else {
         opacityPosition = 1;
         opacity = Color.alpha(lastColor);
@@ -109,57 +115,96 @@ public class GradientColor {
   private int interpolateNextColor(float lastPosition, int lastColor, float opacityPosition, int opacity, float colorPosition, int color) {
     float opacityDelta = opacityPosition - lastPosition;
     float colorDelta = colorPosition - lastPosition;
-    float colorProgress = opacityDelta > 0 ? MathUtils.clamp(colorDelta / opacityDelta, 0, 1) : 0;
-    float opacityProgress = colorDelta > 0 ? MathUtils.clamp(opacityDelta / colorDelta, 0, 1) : 0;
+    float colorProgress = colorDelta > 0 ? MathUtils.clamp(opacityDelta / colorDelta, 0, 1) : 0;
+    float opacityProgress = opacityDelta > 0 ? MathUtils.clamp(colorDelta / opacityDelta, 0, 1) : 0;
 
     int opacityComponent = MiscUtils.lerp(Color.alpha(lastColor), opacity, opacityProgress) << 24;
     int colorComponent = GammaEvaluator.evaluate(colorProgress, lastColor & 0x00FFFFFF, color);
     return opacityComponent | colorComponent;
   }
 
-  public int[] getColors() {
+  /**
+   * @return The merged opacity and colors of this gradient.
+   */
+  public int[] getGradientColors() {
     return gradientColors;
   }
 
-  public float[] getPositions() {
+  /**
+   * @return The merged opacity and color positions of this gradient.
+   */
+  public float[] getGradientPositions() {
     return gradientPositions;
   }
 
-  public int getColorSize() {
-    return colorComponents.length;
+  /**
+   * @return The positions of the color stops of this gradient. Will not include opacity
+   */
+  public float[] getColorStopPositions() {
+    return colorPositions;
   }
 
-  public boolean hasOpacityComponents() {
-    return opacityComponents != null;
+  /**
+   * @return The color stops of this gradient. Will not include opacity
+   */
+  public int[] getColorStops() {
+    return colorStops;
+  }
+
+  /**
+   * @return The positions of the opacity stops of this gradient. Will not include color information
+   */
+  public float[] getOpacityStopPositions() {
+    return opacityPositions;
+  }
+
+  /**
+   * @return The opacity stops of this gradient. Will not include color information
+   */
+  public float[] getOpacityStops() {
+    return opacityStops;
+  }
+
+  public int getColorSize() {
+    return colorStops.length;
+  }
+
+  public boolean hasOpacityStops() {
+    return opacityStops != null && opacityPositions != null;
   }
 
   public int getOpacitySize() {
-    return opacityComponents.length;
+    return opacityStops.length;
   }
 
   public void lerp(GradientColor gc1, GradientColor gc2, float progress) {
-    if (gc1.colorComponents.length != gc2.colorComponents.length) {
+    if (gc1.colorStops.length != gc2.colorStops.length) {
       throw new IllegalArgumentException("Cannot interpolate between gradients. Color stops vary (" +
-          gc1.colorComponents.length + " vs " + gc2.colorComponents.length + ")");
+          gc1.colorStops.length + " vs " + gc2.colorStops.length + ")");
     }
-    for (int i = 0; i < gc1.colorComponents.length; i++) {
+    for (int i = 0; i < gc1.colorStops.length; i++) {
       colorPositions[i] = MiscUtils.lerp(gc1.colorPositions[i], gc2.colorPositions[i], progress);
-      colorComponents[i] = GammaEvaluator.evaluate(progress, gc1.colorComponents[i], gc2.colorComponents[i]);
+      colorStops[i] = GammaEvaluator.evaluate(progress, gc1.colorStops[i], gc2.colorStops[i]);
     }
 
-    if (gc1.hasOpacityComponents() && gc2.hasOpacityComponents()) {
-      if (gc1.opacityComponents.length != gc2.opacityComponents.length) {
+    if (gc1.hasOpacityStops() && gc2.hasOpacityStops()) {
+      if (gc1.opacityStops.length != gc2.opacityStops.length) {
         throw new IllegalArgumentException("Cannot interpolate between gradients. Opacity stops vary (" +
-            gc1.opacityComponents.length + " vs " + gc2.opacityComponents.length + ")");
+            gc1.opacityStops.length + " vs " + gc2.opacityStops.length + ")");
       }
 
-      for (int i = 0; i < gc1.opacityComponents.length; i++) {
-        colorPositions[i] = MiscUtils.lerp(gc1.opacityPositions[i], gc2.opacityPositions[i], progress);
-        opacityComponents[i] = MiscUtils.lerp(progress, gc1.opacityComponents[i], gc2.opacityComponents[i]);
+      for (int i = 0; i < gc1.opacityStops.length; i++) {
+        opacityPositions[i] = MiscUtils.lerp(gc1.opacityPositions[i], gc2.opacityPositions[i], progress);
+        opacityStops[i] = MiscUtils.lerp(gc1.opacityStops[i], gc2.opacityStops[i], progress);
       }
     }
 
-    initArrays();
-    mergeGradientComponents();
+    if (hasOpacityStops()) {
+      initArrays();
+      mergeGradientStops();
+    } else {
+      gradientColors = colorStops;
+      gradientPositions = colorPositions;
+    }
   }
 }

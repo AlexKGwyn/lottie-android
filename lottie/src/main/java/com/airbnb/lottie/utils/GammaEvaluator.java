@@ -27,7 +27,12 @@ public class GammaEvaluator {
   public static int evaluate(float fraction, int startInt, int endInt) {
     if (startInt == endInt) {
       return startInt;
+    } else if(fraction == 0){
+      return startInt;
+    }else if(fraction == 1){
+      return endInt;
     }
+
     float startA = ((startInt >> 24) & 0xff) / 255.0f;
     float startR = ((startInt >> 16) & 0xff) / 255.0f;
     float startG = ((startInt >> 8) & 0xff) / 255.0f;

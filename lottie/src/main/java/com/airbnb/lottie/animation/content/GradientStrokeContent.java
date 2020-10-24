@@ -7,8 +7,6 @@ import android.graphics.PointF;
 import android.graphics.RadialGradient;
 import android.graphics.RectF;
 import android.graphics.Shader;
-import androidx.annotation.Nullable;
-import androidx.collection.LongSparseArray;
 
 import com.airbnb.lottie.LottieDrawable;
 import com.airbnb.lottie.LottieProperty;
@@ -19,6 +17,9 @@ import com.airbnb.lottie.model.content.GradientStroke;
 import com.airbnb.lottie.model.content.GradientType;
 import com.airbnb.lottie.model.layer.BaseLayer;
 import com.airbnb.lottie.value.LottieValueCallback;
+
+import androidx.annotation.Nullable;
+import androidx.collection.LongSparseArray;
 
 public class GradientStrokeContent extends BaseStrokeContent {
   /**
@@ -94,8 +95,15 @@ public class GradientStrokeContent extends BaseStrokeContent {
     PointF startPoint = startPointAnimation.getValue();
     PointF endPoint = endPointAnimation.getValue();
     GradientColor gradientColor = colorAnimation.getValue();
-    int[] colors = applyDynamicColorsIfNeeded(gradientColor.getColors());
-    float[] positions = gradientColor.getPositions();
+    final int[] colors;
+    final float[] positions;
+    if (hasDynamicColors()) {
+      colors = applyDynamicColors(gradientColor.getColorStops());
+      positions = gradientColor.getColorStopPositions();
+    } else {
+      colors = gradientColor.getGradientColors();
+      positions = gradientColor.getGradientPositions();
+    }
     float x0 = startPoint.x;
     float y0 = startPoint.y;
     float x1 = endPoint.x;
@@ -114,8 +122,15 @@ public class GradientStrokeContent extends BaseStrokeContent {
     PointF startPoint = startPointAnimation.getValue();
     PointF endPoint = endPointAnimation.getValue();
     GradientColor gradientColor = colorAnimation.getValue();
-    int[] colors = applyDynamicColorsIfNeeded(gradientColor.getColors());
-    float[] positions = gradientColor.getPositions();
+    final int[] colors;
+    final float[] positions;
+    if (hasDynamicColors()) {
+      colors = applyDynamicColors(gradientColor.getColorStops());
+      positions = gradientColor.getColorStopPositions();
+    } else {
+      colors = gradientColor.getGradientColors();
+      positions = gradientColor.getGradientPositions();
+    }
     float x0 = startPoint.x;
     float y0 = startPoint.y;
     float x1 = endPoint.x;
@@ -143,8 +158,12 @@ public class GradientStrokeContent extends BaseStrokeContent {
     return hash;
   }
 
-  private int[] applyDynamicColorsIfNeeded(int[] colors) {
-    if (colorCallbackAnimation != null) {
+  private boolean hasDynamicColors(){
+    return colorCallbackAnimation != null;
+  }
+
+  private int[] applyDynamicColors(int[] colors) {
+    if (hasDynamicColors()) {
       Integer[] dynamicColors = (Integer[]) colorCallbackAnimation.getValue();
       if (colors.length == dynamicColors.length) {
         for (int i = 0; i < colors.length; i++) {

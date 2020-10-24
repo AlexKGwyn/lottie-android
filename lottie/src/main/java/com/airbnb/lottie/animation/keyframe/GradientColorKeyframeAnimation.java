@@ -12,8 +12,12 @@ public class GradientColorKeyframeAnimation extends KeyframeAnimation<GradientCo
     super(keyframes);
     GradientColor startValue = keyframes.get(0).startValue;
     int colorSize = startValue == null ? 0 : startValue.getColorSize();
-    int opacitySize = startValue == null ? 0 : startValue.getOpacitySize();
-    gradientColor = new GradientColor(new float[colorSize], new int[colorSize], new float[opacitySize], new float[opacitySize]);
+    if (startValue != null && startValue.hasOpacityStops()) {
+      int opacitySize = startValue.getOpacitySize();
+      gradientColor = new GradientColor(new float[colorSize], new int[colorSize], new float[opacitySize], new float[opacitySize]);
+    } else {
+      gradientColor = new GradientColor(new float[colorSize], new int[colorSize], null, null);
+    }
   }
 
   @Override GradientColor getValue(Keyframe<GradientColor> keyframe, float keyframeProgress) {
